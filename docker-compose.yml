@@ -1,0 +1,87 @@
+name: my-docker-project
+
+services:
+    app:
+        build: .
+        image: my-app-image
+        container_name: my_app_container
+        command: >
+                sh -c "python manage.py makemigrations &&
+                        python manage.py migrate &&
+                        python manage.py runserver 0.0.0.0:8000"
+        ports:
+            - "8001:8000"
+        volumes:
+            - .:/app
+        env_file:
+            - ./a_core/.env
+        depends_on:
+        - postgres
+        - redis
+
+        
+    postgres:
+        image: postgres:latest
+        container_name: postgres
+        ports:
+            - "5432:5432"
+        environment:
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+            POSTGRES_DB: postgres
+        restart: unless-stopped
+        volumes:
+            - ./postgres_data:/var/lib/postgresql/data
+        env_file:
+            - ./a_core/.env
+    
+    redis:
+        image: redis:latest
+        container_name: my_redis
+        ports:
+            - "6379:6379"
+        restart: unless-stopped
+        volumes:
+            - ./redis_data:/data
+        env_file:
+            - ./a_core/.env
+    celery:
+        image: my-app-image
+        container_name: my_celery
+        command: celery -A a_core worker -l INFO --concurrency=4 --pool=solo
+        depends_on:
+            - postgres
+            - redis
+            - app
+        volumes:
+            - .:/app
+        env_file:
+            - ./a_core/.env
+
+    flower:
+        image: my-app-image
+        container_name: my-flower
+        command: celery -A a_core flower --basic_auth=admin:password123
+        ports:
+        - "5555:5555"
+        depends_on:
+        - redis
+        env_file:
+            - ./a_core/.env
+
+    beat:
+        image: my-app-image
+        container_name: my-beat
+        command: celery -A a_core beat -l INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+        volumes:
+        - .:/app
+        depends_on:
+        - redis
+        - app
+        env_file:
+            - ./a_core/.env
+
+volumes:
+    postgres_data:
+    redis_data:
+        
